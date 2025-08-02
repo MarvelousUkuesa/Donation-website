@@ -1,0 +1,15 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "donation-website"
+region = "eu-central-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+# Add this line to pass the ARN to your template
+parameter_overrides = "CognitoUserPoolArn=\"arn:aws:cognito-idp:eu-central-1:280224704818:userpool/eu-central-1_YJlGGf5RJ\""
+resolve_s3 = true
+s3_prefix = "donation-website"
+image_repositories = []
+disable_rollback = true
+

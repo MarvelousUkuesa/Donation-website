@@ -1,0 +1,194 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  The complete backend for the donation website, containing all Lambda functions.
+
+Parameters:
+  CognitoUserPoolArn:
+    Type: String
+    Description: The ARN of the Cognito User Pool for the API authorizer.
+
+Globals:
+  Function:
+    Timeout: 15
+    MemorySize: 256
+    Runtime: python3.13
+
+Resources:
+  # Explicitly define the API Gateway resource and its authorizer
+  DonationApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      Auth:
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !Ref CognitoUserPoolArn
+            Identity:
+              Header: Authorization
+        # Set the default authorizer for the whole API.
+        # Individual functions can override this by setting Authorizer: NONE
+        DefaultAuthorizer: CognitoAuthorizer
+
+  # --- Event Pricing Functions ---
+  SetEventPriceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: set_event_price
+      CodeUri: src/set_event_price/
+      Handler: app.lambda_handler
+      Description: Sets the price for a specific event.
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /validate_ticket/set-price
+            Method: post
+            RestApiId: !Ref DonationApi # Link to the explicit API
+            # No Auth block needed; uses the API's default authorizer
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: DonationRecords
+        - DynamoDBCrudPolicy:
+            TableName: EventPriceConfig
+
+  GetEventPriceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: get_event_price
+      CodeUri: src/get_event_price/
+      Handler: app.lambda_handler
+      Description: Gets the price for a specific event.
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /get-price
+            Method: get
+            RestApiId: !Ref DonationApi # Link to the explicit API
+            Auth:
+              Authorizer: "NONE" # This endpoint is public
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: DonationRecords
+        - DynamoDBCrudPolicy:
+            TableName: EventPriceConfig
+        # Replaced DonationAppLambdaPolicy with a self-contained policy
+        - SESCrudPolicy:
+            # For better security, replace '*' with your verified SES Identity ARN
+            IdentityName: "*"
+
+  UnsetPriceEventFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: unset-price-event
+      CodeUri: src/unset-price-event/
+      Handler: app.lambda_handler
+      Description: Removes the price for a specific event.
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /validate_ticket/unset-price
+            Method: post
+            RestApiId: !Ref DonationApi # Link to the explicit API
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: DonationRecords
+        - DynamoDBCrudPolicy:
+            TableName: EventPriceConfig
+
+  # --- Donation and Payment Functions ---
+  ProcessDonationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ProcessDonation
+      CodeUri: src/ProcessDonation/
+      Handler: app.lambda_handler
+      Description: Processes a donation payment intention.
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /ProcessDonation
+            Method: post
+            RestApiId: !Ref DonationApi # Link to the explicit API
+            Auth:
+              Authorizer: "NONE" # This endpoint is public
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: DonationRecords
+        - DynamoDBCrudPolicy:
+            TableName: EventPriceConfig
+        # Replaced DonationAppLambdaPolicy with a self-contained policy
+        - SESCrudPolicy:
+            IdentityName: "*"
+
+  HandleStripeWebhookFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: handle_stripe_webhook
+      CodeUri: src/handle_stripe_webhook/
+      Handler: app.lambda_handler
+      Description: Handles incoming webhooks from Stripe to confirm payments.
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /handle_stripe_webhook
+            Method: post
+            RestApiId: !Ref DonationApi # Link to the explicit API
+            Auth:
+              Authorizer: "NONE" # This endpoint is public and called by Stripe
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: DonationRecords
+        - DynamoDBCrudPolicy:
+            TableName: EventPriceConfig
+        # Replaced DonationAppLambdaPolicy with a self-contained policy
+        - SESCrudPolicy:
+            IdentityName: "*"
+
+  GetDonationDetailsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: getDonationDetails
+      CodeUri: src/getDonationDetails/
+      Handler: app.lambda_handler
+      Description: Retrieves details of a specific donation.
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /getDonationDetials/{donationId}
+            Method: get
+            RestApiId: !Ref DonationApi # Link to the explicit API
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: DonationRecords
+        - DynamoDBCrudPolicy:
+            TableName: EventPriceConfig
+        # Replaced DonationAppLambdaPolicy with a self-contained policy
+        - SESCrudPolicy:
+            IdentityName: "*"
+
+  # --- Ticket Validation ---
+  ValidateTicketFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: validate_ticket
+      CodeUri: src/validate_ticket/
+      Handler: app.lambda_handler
+      Description: Validates a ticket ID.
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /validate_ticket
+            Method: post
+            RestApiId: !Ref DonationApi # Link to the explicit API
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: DonationRecords
+        - DynamoDBCrudPolicy:
+            TableName: EventPriceConfig

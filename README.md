@@ -47,6 +47,8 @@ First-Time Deployment
 
 Run the following commands in your shell to build and deploy the application for the first time:
 
+the my-new-donation-website folder holds the react frontend for the website, replace end point with new endpoint and build and run
+
 # Build the source code and dependencies
 
 sam build
